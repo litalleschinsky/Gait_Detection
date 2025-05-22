@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
+from streamlit_plotly_events import plotly_events
 
 st.set_page_config(page_title="Gait Detection", layout="wide")
 st.markdown("<h1 style='text-align: center; color: #2c3e50;'>Gait Detection</h1>", unsafe_allow_html=True)
@@ -35,6 +36,8 @@ if view_option == "":
                 df_clean = df.dropna(subset=required_cols)
                 df_clean = df_clean[df_clean['Gender'].isin([1, 2])]
                 df_clean['GenderLabel'] = df_clean['Gender'].map({1: 'Male', 2: 'Female'})
+               
+
 
                 def categorize_age(age):
                     if age < 30:
@@ -135,16 +138,62 @@ elif view_option == "Distribution":
 
 
 elif view_option == "Individual Walking Pattern":
-    if 'df_clean' not in st.session_state:
-        st.warning("Please upload a valid data file in the Main Menu first.")
-    else:
-        df_clean = st.session_state['df_clean']
+        if 'df_clean' not in st.session_state:
+            st.warning("Please upload a valid data file in the Main Menu first.")
+        else:
+            df_clean = st.session_state['df_clean']
+        st.markdown("""
+        <style>
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-family: 'Segoe UI', sans-serif;
+          margin-bottom: 20px;
+        }
+        th, td {
+          border: 1px solid #ddd;
+          padding: 10px;
+          vertical-align: top;
+          font-size: 15px;
+        }
+        th {
+          background-color: #2c3e50;
+          color: white;
+          text-align: center;
+        }
+        td {
+          background-color: #f4f6f8;
+        }
+        </style>
+        
+        <table>
+          <thead>
+            <tr>
+              <th colspan="2">Age Category Definitions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Young</strong></td>
+              <td>Participants aged <strong>18–30 years</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Middle-aged</strong></td>
+              <td>Participants aged <strong>31–60 years</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Old</strong></td>
+              <td>Participants aged <strong>61 years and above</strong></td>
+            </tr>
+          </tbody>
+        </table>
+        """, unsafe_allow_html=True)
+
+
 
         st.subheader("Walking Pattern Analysis")
 
-        # סינונים ישירים בלי טופס
         cols = st.columns(4)
-
         with cols[0]:
             gender_options = st.multiselect(
                 "Select Gender",
@@ -180,21 +229,38 @@ elif view_option == "Individual Walking Pattern":
             index=0,
             key="stat_filter"
         )
+  
+        time_min = 0
+        time_max = 2000
+        
+        selected_range = st.slider(
+            "Select Time Range to Display (ms)",
+            min_value=time_min,
+            max_value=time_max,
+            value=(time_min, time_max),
+            step=interval_step
+        )
 
-        # סינון הדאטה לפי הבחירות
         filtered_df = df_clean[
             (df_clean['GenderLabel'].isin(gender_options)) &
             (df_clean['AgeCategory'].isin(age_options)) &
             (df_clean['Axis'] == axis_option)
         ]
+        
 
         if filtered_df.empty:
             st.warning("No data available for this selection.")
         else:
             st.success(f"Showing data for {filtered_df['Subject'].nunique()} participants")
 
+            # מחלצים את כל העמודות שזמניות לפי הצעד
             time_cols = [str(i) for i in range(0, 2000, interval_step)]
+
+            # מסננים רק את העמודות שקיימות בדאטה
             valid_cols = [col for col in time_cols if col in filtered_df.columns]
+
+            # מסננים את העמודות לפי טווח הזמן שנבחר בסליידר
+            valid_cols = [col for col in valid_cols if selected_range[0] <= int(col) <= selected_range[1]]
 
             def compute_stat(vals, stat_option):
                 vals = vals.dropna()
@@ -202,8 +268,7 @@ elif view_option == "Individual Walking Pattern":
                     return vals.mean()
                 elif stat_option == "Median":
                     return vals.median()
-                else:
-                    return None
+                return None
 
             subj_data = []
             for subject, group in filtered_df.groupby('Subject'):
@@ -225,29 +290,58 @@ elif view_option == "Individual Walking Pattern":
                 trend_val = compute_stat(vals, stat_option)
                 trend_vals.append(trend_val)
 
-            # --- גרף 1: צבעוני לכל נבדק + קו מגמה ---
-            import plotly.express as px
+            # --- גרף 1: צבעוני לכל נבדק + קו מגמה מעל ---
+            fig_colorful = go.Figure()
 
-            fig_colorful = px.line(
-                subj_df,
-                x='Time',
-                y='Value',
-                color='Subject',
-                title=f"Walking Pattern Over Time – Axis: {axis_option.upper()} (All Subjects - Colorful)",
-                labels={'Value': 'Value', 'Time': 'Time (ms)'},
-                template="plotly_white",
-                height=600
-            )
+            for subject in subj_df['Subject'].unique():
+                subject_data = subj_df[subj_df['Subject'] == subject]
+                fig_colorful.add_trace(go.Scatter(
+                    x=subject_data['Time'],
+                    y=subject_data['Value'],
+                    mode='lines',
+                    name=f"Subject {subject}",
+                    line=dict(width=1),
+                    showlegend=True
+                ))
+
             fig_colorful.add_trace(go.Scatter(
                 x=[int(t) for t in valid_cols],
                 y=trend_vals,
                 mode='lines',
-                line=dict(color='black', width=4),
+                line=dict(color='black', width=6),
                 name=f"{stat_option} Trend",
-                hoverinfo='name+y'
+                hoverinfo='name+y',
+                showlegend=True 
             ))
-            st.plotly_chart(fig_colorful, use_container_width=True)
 
+            fig_colorful.update_layout(
+                title=f"Walking Pattern Over Time – Axis: {axis_option.upper()} (All Subjects - Colorful)",
+                xaxis_title="Time (ms)",
+                yaxis_title="Value",
+                template="plotly_white",
+                height=600,
+                font=dict(color='#2c3e50')
+            )
+            
+            click_data = plotly_events(
+                fig_colorful,
+                click_event=True,
+                hover_event=False,
+                select_event=False,
+                override_height=600,
+                key="colorful_plot"
+            )
+            
+            # אם יש קליק – הצג הודעה, אבל את שאר הגרפים תמיד תציגי
+            if click_data:
+                clicked_subject = click_data[0].get('curveNumber')
+                subject_list = subj_df['Subject'].unique()
+                if clicked_subject < len(subject_list):
+                    subject_clicked = subject_list[clicked_subject]
+                    st.info(f"Clicked on Subject {subject_clicked}")
+            
+            # שאר הקוד של "Highlight Specific Subject" ו־"View All Axes for a Single Participant" 
+            # ממשיכים מכאן – מחוץ ל־if
             st.markdown("---")
             st.markdown("### Highlight Specific Subject")
 
@@ -289,7 +383,7 @@ elif view_option == "Individual Walking Pattern":
 
             fig_gray.update_layout(
                 title=f"Walking Pattern with Highlighted Subject – Axis: {axis_option.upper()}",
-                xaxis_title="Time (ms)",
+                xaxis_title="",  # הסרת תווית ציר X
                 yaxis_title="Value",
                 legend_title="Subjects",
                 template="plotly_white",
@@ -339,12 +433,80 @@ elif view_option == "Individual Walking Pattern":
                 )
                 st.plotly_chart(fig_axes, use_container_width=True)
 
-                        
+                      
 elif view_option == "Group Walking Pattern":
     if 'df_clean' not in st.session_state:
         st.warning("Please upload a valid data file in the Main Menu first.")
     else:
         df_clean = st.session_state['df_clean']
+        st.markdown("""
+        <style>
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-family: 'Segoe UI', sans-serif;
+          margin-bottom: 20px;
+        }
+        th, td {
+          border: 1px solid #ddd;
+          padding: 10px;
+          vertical-align: top;
+          font-size: 15px;
+        }
+        th {
+          background-color: #2c3e50;
+          color: white;
+          text-align: center;
+        }
+        td {
+          background-color: #f4f6f8;
+        }
+        </style>
+        
+        <table>
+          <thead>
+            <tr>
+              <th colspan="2">Age Category Definitions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Young</strong></td>
+              <td>Participants aged <strong>18–30 years</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Middle-aged</strong></td>
+              <td>Participants aged <strong>31–60 years</strong></td>
+            </tr>
+            <tr>
+              <td><strong>Old</strong></td>
+              <td>Participants aged <strong>61 years and above</strong></td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <table>
+          <thead>
+            <tr>
+              <th colspan="2">BriefBESTest Score Interpretation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Normal</strong></td>
+              <td>Score between <strong>22 and 24</strong> – Indicates typical balance ability</td>
+            </tr>
+            <tr>
+              <td><strong>Abnormal</strong></td>
+              <td>Score between <strong>17 and 21</strong> – Indicates balance impairments</td>
+            </tr>
+            <tr>
+              <td><strong>Other</strong></td>
+              <td>Score below <strong>17</strong> or missing – Considered as out of scope</td>
+            </tr>
+          </tbody>
+        </table>
+        """, unsafe_allow_html=True)
 
         st.subheader("Group Walking Analysis")
 
@@ -399,6 +561,7 @@ elif view_option == "Group Walking Pattern":
                 options=["Mean", "Median"],
                 index=0
             )
+            
 
             submitted = st.form_submit_button("Update Graph")
 
