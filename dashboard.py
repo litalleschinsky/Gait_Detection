@@ -660,8 +660,3 @@ elif view_option == "Group Walking Pattern":
                             st.write(f"- No data for group: **{g}**, **{a}**, **{b}**")
                     else:
                         st.write("All selected groups contain data.")
-
-
-
-
-
