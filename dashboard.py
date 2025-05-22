@@ -323,22 +323,7 @@ elif view_option == "Individual Walking Pattern":
                 font=dict(color='#2c3e50')
             )
             
-            click_data = plotly_events(
-                fig_colorful,
-                click_event=True,
-                hover_event=False,
-                select_event=False,
-                override_height=600,
-                key="colorful_plot"
-            )
-            
-            # אם יש קליק – הצג הודעה, אבל את שאר הגרפים תמיד תציגי
-            if click_data:
-                clicked_subject = click_data[0].get('curveNumber')
-                subject_list = subj_df['Subject'].unique()
-                if clicked_subject < len(subject_list):
-                    subject_clicked = subject_list[clicked_subject]
-                    st.info(f"Clicked on Subject {subject_clicked}")
+            st.plotly_chart(fig_colorful, use_container_width=True)
             
             # שאר הקוד של "Highlight Specific Subject" ו־"View All Axes for a Single Participant" 
             # ממשיכים מכאן – מחוץ ל־if
@@ -660,3 +645,8 @@ elif view_option == "Group Walking Pattern":
                             st.write(f"- No data for group: **{g}**, **{a}**, **{b}**")
                     else:
                         st.write("All selected groups contain data.")
+
+
+
+
+
