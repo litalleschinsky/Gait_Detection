@@ -14,6 +14,7 @@ view_option = st.sidebar.radio(
     "Choose View:",
     options=["", "Distribution", "Individual Walking Pattern", "Group Walking Pattern"],
     format_func=lambda x: "Main Menu" if x == "" else x
+    
 )
 
 if view_option == "":
@@ -136,78 +137,67 @@ elif view_option == "Distribution":
         st.plotly_chart(fig_parallel, use_container_width=True)
 
 
-
 elif view_option == "Individual Walking Pattern":
-        if 'df_clean' not in st.session_state:
-            st.warning("Please upload a valid data file in the Main Menu first.")
-        else:
-            df_clean = st.session_state['df_clean']
+    if 'df_clean' not in st.session_state:
+        st.warning("Please upload a valid data file in the Main Menu first.")
+    else:
+        df_clean = st.session_state['df_clean']
+
+        # CSS לכחול לתוויות ולכותרות
         st.markdown("""
         <style>
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          font-family: 'Segoe UI', sans-serif;
-          margin-bottom: 20px;
+        /* צבע הכניסה של התיבה והווי */
+        .stCheckbox > div > div > input:checked + label::before {
+            border-color: #0d6efd !important;
+            background-color: #0d6efd !important;
         }
-        th, td {
-          border: 1px solid #ddd;
-          padding: 10px;
-          vertical-align: top;
-          font-size: 15px;
+        
+        /* צבע הווי (סימון √) */
+        .stCheckbox > div > div > input:checked + label::after {
+            border-color: white !important;  /* כדי שהווי יהיה לבן על רקע כחול */
+            border-width: 2px !important;
         }
-        th {
-          background-color: #2c3e50;
-          color: white;
-          text-align: center;
-        }
-        td {
-          background-color: #f4f6f8;
+        
+        /* צבע הטקסט של התיבה המסומנת */
+        .stCheckbox > div > div > input:checked + label {
+            color: #0d6efd !important;
+            font-weight: 600;
         }
         </style>
-        
-        <table>
-          <thead>
-            <tr>
-              <th colspan="2">Age Category Definitions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Young</strong></td>
-              <td>Participants aged <strong>18–30 years</strong></td>
-            </tr>
-            <tr>
-              <td><strong>Middle-aged</strong></td>
-              <td>Participants aged <strong>31–60 years</strong></td>
-            </tr>
-            <tr>
-              <td><strong>Old</strong></td>
-              <td>Participants aged <strong>61 years and above</strong></td>
-            </tr>
-          </tbody>
-        </table>
         """, unsafe_allow_html=True)
 
-
+        with st.sidebar.expander("Age Category Definitions"):
+            st.markdown("""
+            - **Young:** Participants aged 18–30 years  
+            - **Middle-aged:** Participants aged 31–60 years  
+            - **Old:** Participants aged 61 years and above  
+            """)
 
         st.subheader("Walking Pattern Analysis")
 
         cols = st.columns(4)
+
+        # Gender selection with checkboxes
+        gender_unique = df_clean['GenderLabel'].unique()
+        gender_selected = []
         with cols[0]:
-            gender_options = st.multiselect(
-                "Select Gender",
-                options=df_clean['GenderLabel'].unique(),
-                default=df_clean['GenderLabel'].unique(),
-                key="gender_filter"
-            )
+            st.markdown("<b>Select Gender</b>", unsafe_allow_html=True)
+            for gender in gender_unique:
+                checked = st.checkbox(gender, value=True, key=f"gender_{gender}")
+                if checked:
+                    gender_selected.append(gender)
+
+        # Age category selection with checkboxes
+        age_unique = df_clean['AgeCategory'].unique()
+        age_selected = []
         with cols[1]:
-            age_options = st.multiselect(
-                "Select Age Category",
-                options=df_clean['AgeCategory'].unique(),
-                default=df_clean['AgeCategory'].unique(),
-                key="age_filter"
-            )
+            st.markdown("<b>Select Age Category</b>", unsafe_allow_html=True)
+            for age_cat in age_unique:
+                checked = st.checkbox(age_cat, value=True, key=f"age_{age_cat}")
+                if checked:
+                    age_selected.append(age_cat)
+
+        # Axis selection (שומר על selectbox רגיל)
         with cols[2]:
             axis_option = st.selectbox(
                 "Select Axis",
@@ -215,6 +205,8 @@ elif view_option == "Individual Walking Pattern":
                 index=0,
                 key="axis_filter"
             )
+
+        # Interval selection (שומר על selectbox רגיל)
         with cols[3]:
             interval_step = st.selectbox(
                 "Time Interval (ms)",
@@ -229,10 +221,10 @@ elif view_option == "Individual Walking Pattern":
             index=0,
             key="stat_filter"
         )
-  
+       
         time_min = 0
         time_max = 2000
-        
+      
         selected_range = st.slider(
             "Select Time Range to Display (ms)",
             min_value=time_min,
@@ -242,24 +234,18 @@ elif view_option == "Individual Walking Pattern":
         )
 
         filtered_df = df_clean[
-            (df_clean['GenderLabel'].isin(gender_options)) &
-            (df_clean['AgeCategory'].isin(age_options)) &
+            (df_clean['GenderLabel'].isin(gender_selected)) &
+            (df_clean['AgeCategory'].isin(age_selected)) &
             (df_clean['Axis'] == axis_option)
         ]
-        
 
         if filtered_df.empty:
             st.warning("No data available for this selection.")
         else:
             st.success(f"Showing data for {filtered_df['Subject'].nunique()} participants")
 
-            # מחלצים את כל העמודות שזמניות לפי הצעד
             time_cols = [str(i) for i in range(0, 2000, interval_step)]
-
-            # מסננים רק את העמודות שקיימות בדאטה
             valid_cols = [col for col in time_cols if col in filtered_df.columns]
-
-            # מסננים את העמודות לפי טווח הזמן שנבחר בסליידר
             valid_cols = [col for col in valid_cols if selected_range[0] <= int(col) <= selected_range[1]]
 
             def compute_stat(vals, stat_option):
@@ -290,9 +276,7 @@ elif view_option == "Individual Walking Pattern":
                 trend_val = compute_stat(vals, stat_option)
                 trend_vals.append(trend_val)
 
-            # --- גרף 1: צבעוני לכל נבדק + קו מגמה מעל ---
             fig_colorful = go.Figure()
-
             for subject in subj_df['Subject'].unique():
                 subject_data = subj_df[subj_df['Subject'] == subject]
                 fig_colorful.add_trace(go.Scatter(
@@ -308,7 +292,7 @@ elif view_option == "Individual Walking Pattern":
                 x=[int(t) for t in valid_cols],
                 y=trend_vals,
                 mode='lines',
-                line=dict(color='black', width=6),
+                line=dict(color='black', width=2),
                 name=f"{stat_option} Trend",
                 hoverinfo='name+y',
                 showlegend=True 
@@ -322,11 +306,8 @@ elif view_option == "Individual Walking Pattern":
                 height=600,
                 font=dict(color='#2c3e50')
             )
-            
             st.plotly_chart(fig_colorful, use_container_width=True)
-            
-            # שאר הקוד של "Highlight Specific Subject" ו־"View All Axes for a Single Participant" 
-            # ממשיכים מכאן – מחוץ ל־if
+
             st.markdown("---")
             st.markdown("### Highlight Specific Subject")
 
@@ -338,7 +319,6 @@ elif view_option == "Individual Walking Pattern":
             )
             highlight_subject_val = None if highlight_subject == "None" else int(highlight_subject)
 
-            # --- גרף 2: אפור עם הדגשה לנבדק נבחר ---
             fig_gray = go.Figure()
             for subject in subj_df['Subject'].unique():
                 subject_data = subj_df[subj_df['Subject'] == subject]
@@ -361,7 +341,7 @@ elif view_option == "Individual Walking Pattern":
                 x=[int(t) for t in valid_cols],
                 y=trend_vals,
                 mode='lines',
-                line=dict(color='black', width=4),
+                line=dict(color='black', width=2),
                 name=f"{stat_option} Trend",
                 hoverinfo='name+y'
             ))
@@ -418,84 +398,38 @@ elif view_option == "Individual Walking Pattern":
                 )
                 st.plotly_chart(fig_axes, use_container_width=True)
 
-                      
+                     
 elif view_option == "Group Walking Pattern":
     if 'df_clean' not in st.session_state:
         st.warning("Please upload a valid data file in the Main Menu first.")
     else:
         df_clean = st.session_state['df_clean']
+
+        # CSS לסימון כחול בצ'קבוקסים
         st.markdown("""
-        <style>
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          font-family: 'Segoe UI', sans-serif;
-          margin-bottom: 20px;
-        }
-        th, td {
-          border: 1px solid #ddd;
-          padding: 10px;
-          vertical-align: top;
-          font-size: 15px;
-        }
-        th {
-          background-color: #2c3e50;
-          color: white;
-          text-align: center;
-        }
-        td {
-          background-color: #f4f6f8;
-        }
-        </style>
-        
-        <table>
-          <thead>
-            <tr>
-              <th colspan="2">Age Category Definitions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Young</strong></td>
-              <td>Participants aged <strong>18–30 years</strong></td>
-            </tr>
-            <tr>
-              <td><strong>Middle-aged</strong></td>
-              <td>Participants aged <strong>31–60 years</strong></td>
-            </tr>
-            <tr>
-              <td><strong>Old</strong></td>
-              <td>Participants aged <strong>61 years and above</strong></td>
-            </tr>
-          </tbody>
-        </table>
-        
-        <table>
-          <thead>
-            <tr>
-              <th colspan="2">BriefBESTest Score Interpretation</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Normal</strong></td>
-              <td>Score between <strong>22 and 24</strong> – Indicates typical balance ability</td>
-            </tr>
-            <tr>
-              <td><strong>Abnormal</strong></td>
-              <td>Score between <strong>17 and 21</strong> – Indicates balance impairments</td>
-            </tr>
-            <tr>
-              <td><strong>Other</strong></td>
-              <td>Score below <strong>17</strong> or missing – Considered as out of scope</td>
-            </tr>
-          </tbody>
-        </table>
+            <style>
+            input[type=checkbox]:checked + div[data-testid="stMarkdownContainer"] svg {
+                color: #1f77b4 !important;  /* כחול */
+            }
+            </style>
         """, unsafe_allow_html=True)
+
+        with st.sidebar.expander("Age Category Definitions"):
+            st.markdown("""
+            - **Young:** Participants aged 18–30 years  
+            - **Middle-aged:** Participants aged 31–60 years  
+            - **Old:** Participants aged 61 years and above  
+            """)
+
+        with st.sidebar.expander("BriefBESTest Score Interpretation"):
+            st.markdown("""
+            - **Normal:** Score between 22 and 24 – Indicates typical balance ability  
+            - **Abnormal:** Score between 17 and 21 – Indicates balance impairments  
+            - **Other:** Score below 17 or missing – Considered as out of scope  
+            """)
 
         st.subheader("Group Walking Analysis")
 
-        # מיפוי BriefBESTest לקטגוריות תקין/לא תקין
         def brief_category(score):
             if 22 <= score <= 24:
                 return "Normal"
@@ -510,25 +444,19 @@ elif view_option == "Group Walking Pattern":
             cols = st.columns(4)
 
             with cols[0]:
-                gender_options = st.multiselect(
-                    "Select Gender(s):",
-                    options=df_clean['GenderLabel'].unique(),
-                    default=list(df_clean['GenderLabel'].unique())
-                )
+                st.markdown("**Select Gender(s):**")
+                gender_options_raw = df_clean['GenderLabel'].unique()
+                gender_options = [g for g in gender_options_raw if st.checkbox(g, value=True, key=f"gender_{g}")]
 
             with cols[1]:
-                age_options = st.multiselect(
-                    "Select Age Category(ies):",
-                    options=df_clean['AgeCategory'].unique(),
-                    default=list(df_clean['AgeCategory'].unique())
-                )
+                st.markdown("**Select Age Category(ies):**")
+                age_options_raw = df_clean['AgeCategory'].unique()
+                age_options = [a for a in age_options_raw if st.checkbox(a, value=True, key=f"age_{a}")]
 
             with cols[2]:
-                brief_options = st.multiselect(
-                    "Select BriefBESTest Category(ies):",
-                    options=["Normal", "Abnormal"],
-                    default=["Normal", "Abnormal"]
-                )
+                st.markdown("**Select BriefBESTest Category(ies):**")
+                brief_options_raw = ["Normal", "Abnormal"]
+                brief_options = [b for b in brief_options_raw if st.checkbox(b, value=True, key=f"brief_{b}")]
 
             with cols[3]:
                 axis_option = st.selectbox(
@@ -546,12 +474,10 @@ elif view_option == "Group Walking Pattern":
                 options=["Mean", "Median"],
                 index=0
             )
-            
 
             submitted = st.form_submit_button("Update Graph")
 
         if submitted:
-            # פונקציה לחישוב סטטיסטיקה (Mean או Median)
             def compute_stat(vals, stat_option):
                 vals = vals.dropna()
                 if stat_option == "Mean":
@@ -561,7 +487,6 @@ elif view_option == "Group Walking Pattern":
                 else:
                     return None
 
-            # סינון נתונים לפי הפילטרים
             filtered_df = df_clean[
                 (df_clean['GenderLabel'].isin(gender_options)) &
                 (df_clean['AgeCategory'].isin(age_options)) &
@@ -572,7 +497,6 @@ elif view_option == "Group Walking Pattern":
             if filtered_df.empty:
                 st.warning("No data available for the selected filters.")
             else:
-                # יצירת קבוצות ייחודיות של השילובים (Gender, AgeCategory, BriefBESTestCat)
                 group_keys = filtered_df.groupby(['GenderLabel', 'AgeCategory', 'BriefBESTestCat'])
 
                 time_cols = [str(i) for i in range(0, 2000, interval_step)]
@@ -583,12 +507,10 @@ elif view_option == "Group Walking Pattern":
                 else:
                     fig = go.Figure()
 
-                    # לעבור על כל קבוצה ולהוסיף קו בגרף
                     for (gender, age_cat, brief_cat), group in group_keys:
                         if group.empty:
                             continue
 
-                        # חישוב ממוצע או מדיאן לכל נקודת זמן בכל הקבוצה
                         stat_vals = [compute_stat(group[t], stat_option) for t in valid_cols]
 
                         if all(v is None for v in stat_vals):
@@ -618,7 +540,6 @@ elif view_option == "Group Walking Pattern":
                         )
                         st.plotly_chart(fig, use_container_width=True)
 
-                    # הצגת הודעה למשתמש על קבוצות ללא נתונים
                     st.markdown("---")
                     st.markdown("### Groups with No Data")
 
@@ -645,8 +566,6 @@ elif view_option == "Group Walking Pattern":
                             st.write(f"- No data for group: **{g}**, **{a}**, **{b}**")
                     else:
                         st.write("All selected groups contain data.")
-
-
 
 
 
